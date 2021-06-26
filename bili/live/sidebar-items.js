@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["get_danmaku_info","Get the danmaku server info."],["room_init","Get the living room info."]],"mod":[["consts",""],["ws",""]],"struct":[["DanmakuHost","DanmakuHost information"],["DanmakuInfo","DanmakuInfo"],["RoomInit","Living room Info."]]});

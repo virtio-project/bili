@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["bili"] = [{"text":"impl DekuContainerRead&lt;'_&gt; for <a class=\"struct\" href=\"bili/live/ws/struct.WsPacket.html\" title=\"struct bili::live::ws::WsPacket\">WsPacket</a>","synthetic":false,"types":["bili::live::ws::WsPacket"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
