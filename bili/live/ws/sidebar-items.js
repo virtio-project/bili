@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["Operation",""],["ProtoVer",""]],"struct":[["EnteringBody",""],["WsPacket",""]]});
+initSidebarItems({"enum":[["Operation",""],["ProtoVer",""]],"struct":[["DanmakuStream",""],["EnteringBody",""],["WsPacket",""]]});
