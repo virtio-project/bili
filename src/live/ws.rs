@@ -47,7 +47,7 @@ impl DanmakuStream {
         let (fail_tx, mut fail_rx) = mpsc::channel(1);
         let (pkt_tx, pkt_rx) = broadcast::channel(10);
 
-        let inner = DanmakuStreamInner {
+        let mut inner = DanmakuStreamInner {
             danmaku_info,
             writer: None,
             reader: None,
@@ -56,6 +56,8 @@ impl DanmakuStream {
             pkt_tx: pkt_tx.clone(),
             last_failed: None,
         };
+
+        inner.connect().await?;
 
         let inner = Arc::new(Mutex::new(inner));
 
