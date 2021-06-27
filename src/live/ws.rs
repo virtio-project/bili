@@ -17,6 +17,7 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use super::{get_danmaku_info, room_init, DanmakuInfo};
 use crate::error::Error;
 use crate::Result;
+use crate::live::RoomInit;
 
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type WsSplitSink = SplitSink<WsStream, Message>;
@@ -31,6 +32,7 @@ pub struct DanmakuStream {
 
 #[derive(Debug)]
 struct DanmakuStreamInner {
+    room_info: RoomInit,
     danmaku_info: DanmakuInfo,
     writer: Option<JoinHandle<()>>,
     reader: Option<JoinHandle<()>>,
@@ -42,12 +44,13 @@ struct DanmakuStreamInner {
 
 impl DanmakuStream {
     pub async fn new(room_id: u64) -> Result<(Self, broadcast::Receiver<WsPacket>)> {
-        let room_init = room_init(room_id).await?;
-        let danmaku_info = get_danmaku_info(room_init.room_id).await?;
+        let room_info = room_init(room_id).await?;
+        let danmaku_info = get_danmaku_info(room_info.room_id).await?;
         let (fail_tx, mut fail_rx) = mpsc::channel(1);
         let (pkt_tx, pkt_rx) = broadcast::channel(10);
 
         let mut inner = DanmakuStreamInner {
+            room_info,
             danmaku_info,
             writer: None,
             reader: None,
@@ -56,6 +59,8 @@ impl DanmakuStream {
             pkt_tx: pkt_tx.clone(),
             last_failed: None,
         };
+
+        debug!("init {:?}", inner);
 
         inner.connect().await?;
 
@@ -120,19 +125,32 @@ impl DanmakuStreamInner {
     }
 
     async fn connect(&mut self) -> Result<()> {
-        let (stream, _): (WsStream, _) = tokio_tungstenite::connect_async(&self.get_url()).await?;
-        let (ws_writer, ws_reader): (WsSplitSink, WsSplitStream) = stream.split();
+        let url = self.get_url();
+        let (stream, _): (WsStream, _) = tokio_tungstenite::connect_async(&url).await?;
+        debug!("ws stream connected to {}", url);
+
+        let (mut ws_writer, ws_reader): (WsSplitSink, WsSplitStream) = stream.split();
+
+        let entering_body = EnteringBody::new(self.room_info.room_id, self.danmaku_info.token.clone());
+        let pkt = WsPacket::new_json(&entering_body, Operation::Entering)?;
+        let payload = pkt.to_bytes()?;
+        ws_writer.send(Message::Binary(payload)).await?;
+        ws_writer.flush().await?;
+        debug!("entering_body sent for {}", self.room_info.room_id);
 
         self.terminate();
+        debug!("reset ws reader/writer task for {}", self.room_info.room_id);
 
         let fail_tx = self.fail_tx.clone();
         let writer = tokio::spawn(Self::send_heartbeat(ws_writer, fail_tx));
         self.writer = Some(writer);
+        debug!("ws writer task (heartbeat) set for {}", self.room_info.room_id);
 
         let pkt_tx = self.pkt_tx.clone();
         let fail_tx = self.fail_tx.clone();
         let reader = tokio::spawn(Self::parse_pkt(ws_reader, pkt_tx, fail_tx));
         self.reader = Some(reader);
+        debug!("ws reader task set for {}", self.room_info.room_id);
 
         Ok(())
     }
@@ -191,6 +209,7 @@ impl DanmakuStreamInner {
         loop {
             if let Err(e) = parse_pkt_inner(&mut ws_reader, &pkt_tx).await {
                 fail_tx.send((Instant::now(), e)).await.unwrap();
+                break
             }
         }
     }
