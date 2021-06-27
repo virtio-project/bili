@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["error",""],["live",""]],"struct":[["ApiResponse","Bilibili API response wrapper"]]});
+initSidebarItems({"enum":[["Error",""]],"mod":[["live",""]],"struct":[["ApiResponse","Bilibili API response wrapper"]],"type":[["Result",""]]});
