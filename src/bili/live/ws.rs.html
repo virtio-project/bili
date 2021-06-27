@@ -334,6 +334,25 @@
 <span id="331">331</span>
 <span id="332">332</span>
 <span id="333">333</span>
+<span id="334">334</span>
+<span id="335">335</span>
+<span id="336">336</span>
+<span id="337">337</span>
+<span id="338">338</span>
+<span id="339">339</span>
+<span id="340">340</span>
+<span id="341">341</span>
+<span id="342">342</span>
+<span id="343">343</span>
+<span id="344">344</span>
+<span id="345">345</span>
+<span id="346">346</span>
+<span id="347">347</span>
+<span id="348">348</span>
+<span id="349">349</span>
+<span id="350">350</span>
+<span id="351">351</span>
+<span id="352">352</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="ident">std::io::Write</span>;
 <span class="kw">use</span> <span class="ident">std::sync::Arc</span>;
@@ -354,6 +373,7 @@
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">get_danmaku_info</span>, <span class="ident">room_init</span>, <span class="ident">DanmakuInfo</span>};
 <span class="kw">use</span> <span class="kw">crate</span><span class="ident">::error::Error</span>;
 <span class="kw">use</span> <span class="kw">crate</span><span class="ident">::Result</span>;
+<span class="kw">use</span> <span class="kw">crate</span><span class="ident">::live::RoomInit</span>;
 
 <span class="kw">type</span> <span class="ident">WsStream</span> <span class="op">=</span> <span class="ident">WebSocketStream</span><span class="op">&lt;</span><span class="ident">MaybeTlsStream</span><span class="op">&lt;</span><span class="ident">TcpStream</span><span class="op">&gt;</span><span class="op">&gt;</span>;
 <span class="kw">type</span> <span class="ident">WsSplitSink</span> <span class="op">=</span> <span class="ident">SplitSink</span><span class="op">&lt;</span><span class="ident">WsStream</span>, <span class="ident">Message</span><span class="op">&gt;</span>;
@@ -368,6 +388,7 @@
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>)]</span>
 <span class="kw">struct</span> <span class="ident">DanmakuStreamInner</span> {
+    <span class="ident">room_info</span>: <span class="ident">RoomInit</span>,
     <span class="ident">danmaku_info</span>: <span class="ident">DanmakuInfo</span>,
     <span class="ident">writer</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">JoinHandle</span><span class="op">&lt;</span>()<span class="op">&gt;</span><span class="op">&gt;</span>,
     <span class="ident">reader</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">JoinHandle</span><span class="op">&lt;</span>()<span class="op">&gt;</span><span class="op">&gt;</span>,
@@ -379,12 +400,13 @@
 
 <span class="kw">impl</span> <span class="ident">DanmakuStream</span> {
     <span class="kw">pub</span> <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">room_id</span>: <span class="ident">u64</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(<span class="self">Self</span>, <span class="ident">broadcast::Receiver</span><span class="op">&lt;</span><span class="ident">WsPacket</span><span class="op">&gt;</span>)<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">room_init</span> <span class="op">=</span> <span class="ident">room_init</span>(<span class="ident">room_id</span>).<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">danmaku_info</span> <span class="op">=</span> <span class="ident">get_danmaku_info</span>(<span class="ident">room_init</span>.<span class="ident">room_id</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">room_info</span> <span class="op">=</span> <span class="ident">room_init</span>(<span class="ident">room_id</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">danmaku_info</span> <span class="op">=</span> <span class="ident">get_danmaku_info</span>(<span class="ident">room_info</span>.<span class="ident">room_id</span>).<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="kw">let</span> (<span class="ident">fail_tx</span>, <span class="kw-2">mut</span> <span class="ident">fail_rx</span>) <span class="op">=</span> <span class="ident">mpsc::channel</span>(<span class="number">1</span>);
         <span class="kw">let</span> (<span class="ident">pkt_tx</span>, <span class="ident">pkt_rx</span>) <span class="op">=</span> <span class="ident">broadcast::channel</span>(<span class="number">10</span>);
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="ident">DanmakuStreamInner</span> {
+            <span class="ident">room_info</span>,
             <span class="ident">danmaku_info</span>,
             <span class="ident">writer</span>: <span class="prelude-val">None</span>,
             <span class="ident">reader</span>: <span class="prelude-val">None</span>,
@@ -393,6 +415,8 @@
             <span class="ident">pkt_tx</span>: <span class="ident">pkt_tx</span>.<span class="ident">clone</span>(),
             <span class="ident">last_failed</span>: <span class="prelude-val">None</span>,
         };
+
+        <span class="macro">debug!</span>(<span class="string">&quot;init {:?}&quot;</span>, <span class="ident">inner</span>);
 
         <span class="ident">inner</span>.<span class="ident">connect</span>().<span class="kw">await</span><span class="question-mark">?</span>;
 
@@ -457,19 +481,32 @@
     }
 
     <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">connect</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> (<span class="ident">stream</span>, <span class="kw">_</span>): (<span class="ident">WsStream</span>, <span class="kw">_</span>) <span class="op">=</span> <span class="ident">tokio_tungstenite::connect_async</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">get_url</span>()).<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="kw">let</span> (<span class="ident">ws_writer</span>, <span class="ident">ws_reader</span>): (<span class="ident">WsSplitSink</span>, <span class="ident">WsSplitStream</span>) <span class="op">=</span> <span class="ident">stream</span>.<span class="ident">split</span>();
+        <span class="kw">let</span> <span class="ident">url</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">get_url</span>();
+        <span class="kw">let</span> (<span class="ident">stream</span>, <span class="kw">_</span>): (<span class="ident">WsStream</span>, <span class="kw">_</span>) <span class="op">=</span> <span class="ident">tokio_tungstenite::connect_async</span>(<span class="kw-2">&amp;</span><span class="ident">url</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="macro">debug!</span>(<span class="string">&quot;ws stream connected to {}&quot;</span>, <span class="ident">url</span>);
+
+        <span class="kw">let</span> (<span class="kw-2">mut</span> <span class="ident">ws_writer</span>, <span class="ident">ws_reader</span>): (<span class="ident">WsSplitSink</span>, <span class="ident">WsSplitStream</span>) <span class="op">=</span> <span class="ident">stream</span>.<span class="ident">split</span>();
+
+        <span class="kw">let</span> <span class="ident">entering_body</span> <span class="op">=</span> <span class="ident">EnteringBody::new</span>(<span class="self">self</span>.<span class="ident">room_info</span>.<span class="ident">room_id</span>, <span class="self">self</span>.<span class="ident">danmaku_info</span>.<span class="ident">token</span>.<span class="ident">clone</span>());
+        <span class="kw">let</span> <span class="ident">pkt</span> <span class="op">=</span> <span class="ident">WsPacket::new_json</span>(<span class="kw-2">&amp;</span><span class="ident">entering_body</span>, <span class="ident">Operation::Entering</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">payload</span> <span class="op">=</span> <span class="ident">pkt</span>.<span class="ident">to_bytes</span>()<span class="question-mark">?</span>;
+        <span class="ident">ws_writer</span>.<span class="ident">send</span>(<span class="ident">Message::Binary</span>(<span class="ident">payload</span>)).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="ident">ws_writer</span>.<span class="ident">flush</span>().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="macro">debug!</span>(<span class="string">&quot;entering_body sent for {}&quot;</span>, <span class="self">self</span>.<span class="ident">room_info</span>.<span class="ident">room_id</span>);
 
         <span class="self">self</span>.<span class="ident">terminate</span>();
+        <span class="macro">debug!</span>(<span class="string">&quot;reset ws reader/writer task for {}&quot;</span>, <span class="self">self</span>.<span class="ident">room_info</span>.<span class="ident">room_id</span>);
 
         <span class="kw">let</span> <span class="ident">fail_tx</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">fail_tx</span>.<span class="ident">clone</span>();
         <span class="kw">let</span> <span class="ident">writer</span> <span class="op">=</span> <span class="ident">tokio::spawn</span>(<span class="self">Self</span><span class="ident">::send_heartbeat</span>(<span class="ident">ws_writer</span>, <span class="ident">fail_tx</span>));
         <span class="self">self</span>.<span class="ident">writer</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">writer</span>);
+        <span class="macro">debug!</span>(<span class="string">&quot;ws writer task (heartbeat) set for {}&quot;</span>, <span class="self">self</span>.<span class="ident">room_info</span>.<span class="ident">room_id</span>);
 
         <span class="kw">let</span> <span class="ident">pkt_tx</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">pkt_tx</span>.<span class="ident">clone</span>();
         <span class="kw">let</span> <span class="ident">fail_tx</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">fail_tx</span>.<span class="ident">clone</span>();
         <span class="kw">let</span> <span class="ident">reader</span> <span class="op">=</span> <span class="ident">tokio::spawn</span>(<span class="self">Self</span><span class="ident">::parse_pkt</span>(<span class="ident">ws_reader</span>, <span class="ident">pkt_tx</span>, <span class="ident">fail_tx</span>));
         <span class="self">self</span>.<span class="ident">reader</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">reader</span>);
+        <span class="macro">debug!</span>(<span class="string">&quot;ws reader task set for {}&quot;</span>, <span class="self">self</span>.<span class="ident">room_info</span>.<span class="ident">room_id</span>);
 
         <span class="prelude-val">Ok</span>(())
     }
@@ -528,6 +565,7 @@
         <span class="kw">loop</span> {
             <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=</span> <span class="ident">parse_pkt_inner</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">ws_reader</span>, <span class="kw-2">&amp;</span><span class="ident">pkt_tx</span>).<span class="kw">await</span> {
                 <span class="ident">fail_tx</span>.<span class="ident">send</span>((<span class="ident">Instant::now</span>(), <span class="ident">e</span>)).<span class="kw">await</span>.<span class="ident">unwrap</span>();
+                <span class="kw">break</span>
             }
         }
     }
