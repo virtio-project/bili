@@ -1,10 +1,14 @@
-///! A library for interacting with `bilibili.com`
+//! `bili` is a library for interacting
+//! with [bilibili](https://bilibili.com).
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/RedCircleProject/bili/master/bili.png"
+)]
 #[macro_use]
 extern crate log;
 
 use serde::{Deserialize, Serialize};
 
-pub mod error;
+mod error;
 pub mod live;
 pub use error::{Error, Result};
 
