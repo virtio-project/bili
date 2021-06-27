@@ -8,7 +8,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
 use tokio_tungstenite::tungstenite::Message;
@@ -26,6 +26,7 @@ type WsSplitStream = SplitStream<WsStream>;
 pub struct DanmakuStream {
     inner: Arc<Mutex<DanmakuStreamInner>>,
     fail_over_task: Arc<Mutex<JoinHandle<()>>>,
+    pkt_tx: broadcast::Sender<WsPacket>,
 }
 
 #[derive(Debug)]
@@ -35,16 +36,16 @@ struct DanmakuStreamInner {
     reader: Option<JoinHandle<()>>,
     srv_index: usize,
     fail_tx: mpsc::Sender<(Instant, Error)>,
-    pkt_tx: mpsc::UnboundedSender<WsPacket>,
+    pkt_tx: broadcast::Sender<WsPacket>,
     last_failed: Option<Instant>,
 }
 
 impl DanmakuStream {
-    pub async fn new(room_id: u64) -> Result<(Self, mpsc::UnboundedReceiver<WsPacket>)> {
+    pub async fn new(room_id: u64) -> Result<(Self, broadcast::Receiver<WsPacket>)> {
         let room_init = room_init(room_id).await?;
         let danmaku_info = get_danmaku_info(room_init.room_id).await?;
-        let (fail_tx, mut fail_rx) = tokio::sync::mpsc::channel(1);
-        let (pkt_tx, pkt_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (fail_tx, mut fail_rx) = mpsc::channel(1);
+        let (pkt_tx, pkt_rx) = broadcast::channel(10);
 
         let inner = DanmakuStreamInner {
             danmaku_info,
@@ -52,7 +53,7 @@ impl DanmakuStream {
             reader: None,
             srv_index: 0,
             fail_tx,
-            pkt_tx,
+            pkt_tx: pkt_tx.clone(),
             last_failed: None,
         };
 
@@ -84,9 +85,14 @@ impl DanmakuStream {
             Self {
                 inner,
                 fail_over_task: Arc::new(Mutex::new(fail_over_task)),
+                pkt_tx
             },
             pkt_rx,
         ))
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<WsPacket> {
+        self.pkt_tx.subscribe()
     }
 }
 
@@ -131,12 +137,12 @@ impl DanmakuStreamInner {
 
     async fn parse_pkt(
         mut ws_reader: WsSplitStream,
-        pkt_tx: mpsc::UnboundedSender<WsPacket>,
+        pkt_tx: broadcast::Sender<WsPacket>,
         fail_tx: mpsc::Sender<(Instant, Error)>,
     ) {
         async fn parse_pkt_inner(
             ws_reader: &mut WsSplitStream,
-            pkt_tx: &mpsc::UnboundedSender<WsPacket>,
+            pkt_tx: &broadcast::Sender<WsPacket>,
         ) -> Result<()> {
             if let Some(msg) = ws_reader.next().await {
                 let msg = msg?.into_data();
@@ -166,8 +172,7 @@ impl DanmakuStreamInner {
                         let ((remaining, new_offset), pkt): ((&[u8], usize), WsPacket) =
                             WsPacket::from_bytes((bytes, offset))?;
                         debug!("zlib-ed ws packet found: {:?}", pkt);
-                        // this error should be swallowed.
-                        pkt_tx.send(pkt).ok();
+                        pkt_tx.send(pkt)?;
                         if remaining.len() == 0 {
                             break;
                         }
@@ -175,8 +180,7 @@ impl DanmakuStreamInner {
                         offset = new_offset;
                     }
                 } else {
-                    // this error should be swallowed.
-                    pkt_tx.send(pkt).ok();
+                    pkt_tx.send(pkt)?;
                 }
             }
             Ok(())
@@ -210,7 +214,7 @@ impl DanmakuStreamInner {
     }
 }
 
-#[derive(Debug, PartialEq, DekuRead, DekuWrite, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DekuRead, DekuWrite, Serialize, Deserialize)]
 #[deku(endian = "big")]
 pub struct WsPacket {
     #[deku(bits = "32")]
@@ -225,7 +229,7 @@ pub struct WsPacket {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug, PartialEq, DekuRead, DekuWrite, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, DekuRead, DekuWrite, Serialize, Deserialize)]
 #[deku(type = "u16", endian = "endian", ctx = "endian: deku::ctx::Endian")]
 pub enum ProtoVer {
     #[deku(id = "0")]
@@ -238,7 +242,7 @@ pub enum ProtoVer {
     Unknown,
 }
 
-#[derive(Debug, PartialEq, DekuRead, DekuWrite, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, DekuRead, DekuWrite, Serialize, Deserialize)]
 #[deku(type = "u32", endian = "endian", ctx = "endian: deku::ctx::Endian")]
 pub enum Operation {
     #[deku(id = "2")]

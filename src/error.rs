@@ -1,3 +1,4 @@
+use crate::live::ws::WsPacket;
 use thiserror::Error;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -14,4 +15,6 @@ pub enum Error {
     WsDecode(#[from] deku::DekuError),
     #[error("error occurred while uncompressing ws packet: {0:?}")]
     Zlib(std::io::Error),
+    #[error("no available packet consumer")]
+    Consumer(#[from] tokio::sync::broadcast::error::SendError<WsPacket>),
 }
