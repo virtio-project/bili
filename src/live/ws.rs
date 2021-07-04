@@ -178,7 +178,7 @@ impl DanmakuStreamInner {
                 );
                 let ((rest, _), pkt): ((&[u8], usize), WsPacket) =
                     WsPacket::from_bytes((msg.as_ref(), 0))?;
-                if rest.len() != 0 {
+                if !rest.is_empty() {
                     warn!(
                         "a ws message contains undecoded bytes: {}",
                         hex::encode(&rest)
@@ -187,9 +187,8 @@ impl DanmakuStreamInner {
                 debug!("parse a ws packet: {:?}", pkt);
                 if pkt.proto_ver == ProtoVer::ZlibBuf {
                     let mut z = ZlibDecoder::new(Vec::new());
-                    z.write_all(pkt.data.as_slice())
-                        .map_err(|e| Error::Zlib(e))?;
-                    let buf = z.finish().map_err(|e| Error::Zlib(e))?;
+                    z.write_all(pkt.data.as_slice()).map_err(Error::Zlib)?;
+                    let buf = z.finish().map_err(Error::Zlib)?;
                     trace!("zlib inner({} bytes): {}", buf.len(), hex::encode(&buf));
                     let mut bytes = buf.as_slice();
                     let mut offset = 0usize;
@@ -198,7 +197,7 @@ impl DanmakuStreamInner {
                             WsPacket::from_bytes((bytes, offset))?;
                         debug!("zlib-ed ws packet found: {:?}", pkt);
                         pkt_tx.send(pkt)?;
-                        if remaining.len() == 0 {
+                        if remaining.is_empty() {
                             break;
                         }
                         bytes = remaining;
