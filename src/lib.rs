@@ -1,8 +1,6 @@
 //! `bili` is a library for interacting
 //! with [bilibili](https://bilibili.com).
-#![doc(
-    html_logo_url = "https://raw.githubusercontent.com/RedCircleProject/bili/master/bili.png"
-)]
+#![doc(html_logo_url = "https://raw.githubusercontent.com/RedCircleProject/bili/master/bili.png")]
 #[macro_use]
 extern crate log;
 
