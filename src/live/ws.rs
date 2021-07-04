@@ -16,8 +16,9 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use super::{get_danmaku_info, room_init, DanmakuInfo};
 use crate::error::Error;
-use crate::Result;
 use crate::live::RoomInit;
+use crate::Result;
+use std::convert::TryInto;
 
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type WsSplitSink = SplitSink<WsStream, Message>;
@@ -92,7 +93,7 @@ impl DanmakuStream {
             Self {
                 inner,
                 fail_over_task: Arc::new(Mutex::new(fail_over_task)),
-                pkt_tx
+                pkt_tx,
             },
             pkt_rx,
         ))
@@ -131,7 +132,8 @@ impl DanmakuStreamInner {
 
         let (mut ws_writer, ws_reader): (WsSplitSink, WsSplitStream) = stream.split();
 
-        let entering_body = EnteringBody::new(self.room_info.room_id, self.danmaku_info.token.clone());
+        let entering_body =
+            EnteringBody::new(self.room_info.room_id, self.danmaku_info.token.clone());
         let pkt = WsPacket::new_json(&entering_body, Operation::Entering)?;
         let payload = pkt.to_bytes()?;
         ws_writer.send(Message::Binary(payload)).await?;
@@ -144,7 +146,10 @@ impl DanmakuStreamInner {
         let fail_tx = self.fail_tx.clone();
         let writer = tokio::spawn(Self::send_heartbeat(ws_writer, fail_tx));
         self.writer = Some(writer);
-        debug!("ws writer task (heartbeat) set for {}", self.room_info.room_id);
+        debug!(
+            "ws writer task (heartbeat) set for {}",
+            self.room_info.room_id
+        );
 
         let pkt_tx = self.pkt_tx.clone();
         let fail_tx = self.fail_tx.clone();
@@ -209,7 +214,7 @@ impl DanmakuStreamInner {
         loop {
             if let Err(e) = parse_pkt_inner(&mut ws_reader, &pkt_tx).await {
                 fail_tx.send((Instant::now(), e)).await.unwrap();
-                break
+                break;
             }
         }
     }
@@ -301,6 +306,20 @@ impl WsPacket {
             seq_id: 1,
             data: vec![],
         }
+    }
+
+    /// Get the popularity if this is a heartbeat reply
+    pub fn popularity(&self) -> Option<i32> {
+        if self.operation == Operation::HeartBeatReply {
+            if let Ok(popularity) = self.data.as_slice().try_into() {
+                return Some(i32::from_be_bytes(popularity));
+            }
+            error!(
+                "(PLEASE REPORT THIS) unrecognized HeartBeatReply: {}",
+                hex::encode(&self.data)
+            );
+        }
+        None
     }
 
     pub fn decode_body<T: DeserializeOwned>(&self) -> Result<T> {
