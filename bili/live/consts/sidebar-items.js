@@ -1,1 +1,1 @@
-initSidebarItems({"constant":[["DANMAKU_SERVER_CONF",""],["ROOM_INIT",""]]});
+initSidebarItems({"constant":[["DANMAKU_SERVER_CONF",""],["PLAY_URL",""],["ROOM_INIT",""]]});
