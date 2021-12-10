@@ -46,6 +46,33 @@ pub struct DanmakuHost {
     pub ws_port: u16,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Playback Url Infos
+pub struct PlayUrlInfos {
+    pub current_quality: u16,
+    pub accept_quality: Vec<String>,
+    pub current_qn: u32,
+    pub quality_description: Vec<QualityDescription>,
+    pub durl: Vec<PlayUrl>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Quality description
+pub struct QualityDescription {
+    pub qn: u32,
+    pub desc: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Playback Url
+pub struct PlayUrl {
+    pub url: String,
+    pub length: u16,
+    pub order: u16,
+    pub stream_type: u16,
+    pub p2p_type: u16,
+}
+
 /// Get the living room info.
 pub async fn room_init(room_id: u64) -> Result<RoomInit> {
     let url = format!("{}?id={}", consts::ROOM_INIT, room_id);
@@ -60,6 +87,14 @@ pub async fn get_danmaku_info(room_id: u64) -> Result<DanmakuInfo> {
     let url = format!("{}?id={}&type=0", consts::DANMAKU_SERVER_CONF, room_id);
     debug!("get_danmaku_info request to: {}", url);
     let response: ApiResponse<DanmakuInfo> = reqwest::get(url).await?.json().await?;
+    debug!("response: {}", serde_json::to_string(&response).unwrap());
+    Ok(response.into_data())
+}
+
+pub async fn get_play_url_info(room_id: u64) -> Result<PlayUrlInfos> {
+    let url = format!("{}?cid={}&platform=web", consts::PLAY_URL, room_id);
+    debug!("get_play_url_info request to: {}", url);
+    let response: ApiResponse<PlayUrlInfos> = reqwest::get(url).await?.json().await?;
     debug!("response: {}", serde_json::to_string(&response).unwrap());
     Ok(response.into_data())
 }
@@ -82,5 +117,13 @@ mod tests {
         let resp = get_danmaku_info(14507014).await.unwrap();
         info!("{:?}", resp);
         assert!(resp.host_list.len() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_play_url_info() {
+        pretty_env_logger::try_init().ok();
+        let resp = get_play_url_info(14507014).await.unwrap();
+        info!("{:?}", resp);
+        assert!(resp.durl.len() > 0);
     }
 }
